@@ -27,7 +27,7 @@ jobs:
 
       - name: Publish
         run: >
-          dotnet publish src/ZipCode.Cli/ZipCode.Cli.csproj
+          dotnet publish ZipCode.Cli.csproj
           -c Release
           --self-contained false
           -o artifacts/publish/zip-code
