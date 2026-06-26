@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lique.dev/schemas/zip-code.schema.json",
+  "title": "zip-code configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "root": {
+      "type": "string",
+      "description": "Project/package root used to resolve scope sources, output.directory, and ZIP-relative paths. Relative paths are resolved from the process working directory.",
+      "default": "."
+    },
+    "defaultScope": {
+      "type": "string"
+    },
+    "caseSensitive": {
+      "type": "boolean",
+      "description": "Whether rule matching is case-sensitive.",
+      "default": false
+    },
+    "defaultAction": {
+      "type": "string",
+      "enum": [
+        "include",
+        "exclude"
+      ],
+      "description": "Decision used when no rule matches.",
+      "default": "include"
+    },
+    "output": {
+      "$ref": "#/$defs/output"
+    },
+    "scopes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/scope"
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "Ordered rules. The first matching rule wins.",
+      "items": {
+        "$ref": "#/$defs/rule"
+      },
+      "default": []
+    }
+  },
+  "required": [
+    "scopes"
+  ],
+  "$defs": {
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string",
+          "default": ".zipcode"
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Supports {scope}, {scopeLower}, {timestamp}, and {timestampUtc}.",
+          "default": "code_{scopeLower}_{timestampUtc}.zip"
+        },
+        "manifestEntryName": {
+          "type": "string",
+          "default": "manifest.json"
+        },
+        "compressionLevel": {
+          "type": "string",
+          "enum": [
+            "Optimal",
+            "Fastest",
+            "NoCompression",
+            "SmallestSize"
+          ],
+          "default": "Fastest"
+        },
+        "overwrite": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "default": {}
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "sources"
+      ]
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "include",
+            "exclude"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "enum": [
+            "any",
+            "file",
+            "directory"
+          ],
+          "default": "any"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional list of scopes where this rule applies."
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "pattern"
+          ]
+        },
+        {
+          "required": [
+            "patterns"
+          ]
+        }
+      ]
+    }
+  }
+}

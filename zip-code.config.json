@@ -1,0 +1,108 @@
+{
+  "$schema": "./zip-code.schema.json",
+  "root": ".",
+  "defaultScope": "All",
+  "caseSensitive": false,
+  "defaultAction": "include",
+  "output": {
+    "directory": ".zipcode",
+    "fileName": "code_{scopeLower}_{timestampUtc}.zip",
+    "manifestEntryName": "manifest.json",
+    "compressionLevel": "Fastest",
+    "overwrite": false
+  },
+  "scopes": {
+    "Cli": {
+      "description": "The zip-code CLI project itself.",
+      "sources": [
+        "."
+      ]
+    },
+    "All": {
+      "description": "Dev alias for packaging this project.",
+      "sources": [
+        "."
+      ]
+    }
+  },
+  "rules": [
+    {
+      "name": "Allow known generated source exceptions before generic generated exclusions",
+      "action": "include",
+      "target": "any",
+      "patterns": [
+        "backend/Connectico.Integrations.Amazon/Generated/**"
+      ]
+    },
+    {
+      "name": "Exclude build, dependency, cache, IDE, and output directories",
+      "action": "exclude",
+      "target": "directory",
+      "patterns": [
+        "**/.git/**",
+        "**/.vs/**",
+        "**/.vscode/**",
+        "**/.idea/**",
+        "**/bin/**",
+        "**/obj/**",
+        "**/node_modules/**",
+        "**/.next/**",
+        "**/.turbo/**",
+        "**/.cache/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/out/**",
+        "**/coverage/**",
+        "**/.zipcode/**",
+        "**/zip/**",
+        "**/.artifacts/**",
+        "**/generated/**"
+      ]
+    },
+    {
+      "name": "Exclude archives, logs, generated metadata, locks, and binary web assets",
+      "action": "exclude",
+      "target": "file",
+      "patterns": [
+        "**/*.zip",
+        "**/*.log",
+        "**/*.tmp",
+        "**/*.tsbuildinfo",
+        "**/*.lscache",
+        "**/*-lock.json",
+        "**/*-lock.yaml",
+        "**/package-lock.json",
+        "**/packages.lock.json",
+        "**/pnpm-lock.yaml",
+        "**/yarn.lock",
+        "**/npm-shrinkwrap.json",
+        "**/composer.lock",
+        "**/Cargo.lock",
+        "**/Gemfile.lock",
+        "**/poetry.lock",
+        "**/uv.lock",
+        "**/openapi.json",
+        "**/favicon.ico",
+        "**/*.Designer.cs",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.webp",
+        "**/*.ico",
+        "**/*.svg"
+      ]
+    },
+    {
+      "name": "Exclude local editor and OS noise",
+      "action": "exclude",
+      "target": "file",
+      "patterns": [
+        "**/.DS_Store",
+        "**/Thumbs.db",
+        "**/*.user",
+        "**/*.suo"
+      ]
+    }
+  ]
+}

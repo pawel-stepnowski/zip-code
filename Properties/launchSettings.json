@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ZipCode.Cli": {
+      "commandName": "Project",
+      "commandLineArgs": "pack --scope All"
+    }
+  }
+}
