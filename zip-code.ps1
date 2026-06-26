@@ -2,41 +2,463 @@
 param
 (
     [Parameter()]
-    $ConfigurationPath,
+    [ValidateNotNullOrEmpty()]
+    [string[]] $Scope = @("All"),
+
     [Parameter()]
-    $ZipCodeExecutableDirectoryPath,
+    [string] $ConfigurationPath,
+
     [Parameter()]
-    $ZipCodeExecutableFileName = "ZipCode.Cli.exe"
+    [string] $RepositoryRootPath,
+
+    [Parameter()]
+    [ValidateNotNullOrEmpty()]
+    [string] $ZipCodeVersion = "0.1.2",
+
+    [Parameter()]
+    [switch] $Latest,
+
+    [Parameter()]
+    [switch] $ForceDownload,
+
+    [Parameter()]
+    [switch] $NoDownload,
+
+    [Parameter()]
+    [switch] $DryRun,
+
+    [Parameter()]
+    [Alias("PrintFileList")]
+    [switch] $Print,
+
+    [Parameter()]
+    [string[]] $CliArguments = @()
 )
 
-if (-not $ConfigurationPath)
+$ErrorActionPreference = "Stop"
+
+$ZipCodeReleaseOwner = "pawel-stepnowski"
+$ZipCodeReleaseRepository = "zip-code"
+$ZipCodeReleaseAssetName = "zip-code.zip"
+
+function Resolve-FullPath
 {
-    $ConfigurationPath = Join-Path -Path $PSScriptRoot -ChildPath "zip-code.config.json"
-}
-else
-{
-    $ConfigurationPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ConfigurationPath)
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
 }
 
-if (-not $ZipCodeExecutableDirectoryPath)
+function Get-ZipCodeDownloadUrl
 {
-    $localBinDirectoryPath = Join-Path -Path $PSScriptRoot -ChildPath "bin" -AdditionalChildPath "Debug", "net10.0"
-    $localBinExecutablePath = Join-Path -Path $localBinDirectoryPath -ChildPath $ZipCodeExecutableFileName
-    
-    if (Test-Path -LiteralPath $localBinExecutablePath -PathType Leaf)
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [string] $Version
+    )
+
+    if ($Version -eq "latest")
     {
-        $ZipCodeExecutableDirectoryPath = $localBinDirectoryPath
+        return "https://github.com/$ZipCodeReleaseOwner/$ZipCodeReleaseRepository/releases/latest/download/$ZipCodeReleaseAssetName"
+    }
+
+    return "https://github.com/$ZipCodeReleaseOwner/$ZipCodeReleaseRepository/releases/download/$Version/$ZipCodeReleaseAssetName"
+}
+
+function Convert-ScopeArguments
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [string[]] $Values
+    )
+
+    $result = @()
+
+    foreach ($value in $Values)
+    {
+        if ([string]::IsNullOrWhiteSpace($value))
+        {
+            continue
+        }
+
+        foreach ($part in ($value -split ","))
+        {
+            $scopeName = $part.Trim()
+
+            if (-not [string]::IsNullOrWhiteSpace($scopeName))
+            {
+                $result += $scopeName
+            }
+        }
+    }
+
+    $result = @($result | Select-Object -Unique)
+
+    if ($result.Count -eq 0)
+    {
+        throw "At least one scope must be provided."
+    }
+
+    return $result
+}
+
+function Get-JsonPropertyValue
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [object] $Object,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Name
+    )
+
+    $property = $Object.PSObject.Properties |
+        Where-Object { [string]::Equals($_.Name, $Name, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 1
+
+    if ($property)
+    {
+        return $property.Value
+    }
+
+    return $null
+}
+
+function New-CompositeScopeConfiguration
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [string] $ConfigurationPath,
+
+        [Parameter(Mandatory = $true)]
+        [string[]] $ScopeNames,
+
+        [Parameter(Mandatory = $true)]
+        [string] $CacheDirectoryPath
+    )
+
+    if ($ScopeNames.Count -eq 1)
+    {
+        return [PSCustomObject]@{
+            ConfigurationPath = $ConfigurationPath
+            ScopeName = $ScopeNames[0]
+        }
+    }
+
+    $configuration = Get-Content -LiteralPath $ConfigurationPath -Raw | ConvertFrom-Json
+
+    if (-not $configuration.scopes)
+    {
+        throw "Configuration does not contain a 'scopes' object: $ConfigurationPath"
+    }
+
+    $sources = @()
+
+    foreach ($scopeName in $ScopeNames)
+    {
+        $scopeDefinition = Get-JsonPropertyValue -Object $configuration.scopes -Name $scopeName
+
+        if (-not $scopeDefinition)
+        {
+            throw "Scope '$scopeName' is not defined in configuration: $ConfigurationPath"
+        }
+
+        foreach ($source in @($scopeDefinition.sources))
+        {
+            if ($sources -notcontains $source)
+            {
+                $sources += $source
+            }
+        }
+    }
+
+    if ($sources.Count -eq 0)
+    {
+        throw "Composite scope has no sources: $($ScopeNames -join ', ')"
+    }
+
+    $scopeLabel = ($ScopeNames | ForEach-Object { $_.Trim().ToLowerInvariant() }) -join "_"
+    $scopeLabel = $scopeLabel -replace "[^a-z0-9_.-]", "_"
+    $compositeScopeName = "composite_$scopeLabel"
+
+    $compositeScope = [PSCustomObject]@{
+        description = "Generated by zip-code.ps1 from scopes: $($ScopeNames -join ', ')"
+        sources = $sources
+    }
+
+    $configuration.scopes | Add-Member `
+        -NotePropertyName $compositeScopeName `
+        -NotePropertyValue $compositeScope `
+        -Force
+
+    $configCacheDirectoryPath = Join-Path -Path $CacheDirectoryPath -ChildPath "configs"
+    New-Item -ItemType Directory -Force -Path $configCacheDirectoryPath | Out-Null
+
+    $effectiveConfigurationPath = Join-Path -Path $configCacheDirectoryPath -ChildPath "zip-code.$compositeScopeName.config.json"
+
+    $configuration |
+        ConvertTo-Json -Depth 100 |
+        Set-Content -LiteralPath $effectiveConfigurationPath -Encoding UTF8
+
+    return [PSCustomObject]@{
+        ConfigurationPath = $effectiveConfigurationPath
+        ScopeName = $compositeScopeName
     }
 }
 
-$ZipCodeExecutablePath = Join-Path -Path $ZipCodeExecutableDirectoryPath -ChildPath $ZipCodeExecutableFileName
+function Find-ZipCodeDll
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [string] $DirectoryPath
+    )
 
-Push-Location -LiteralPath $PSScriptRoot
+    if (-not (Test-Path -LiteralPath $DirectoryPath -PathType Container))
+    {
+        return $null
+    }
+
+    $knownNames = @(
+        "ZipCode.Cli.dll",
+        "zip-code.dll"
+    )
+
+    foreach ($knownName in $knownNames)
+    {
+        $candidatePath = Join-Path -Path $DirectoryPath -ChildPath $knownName
+
+        if (Test-Path -LiteralPath $candidatePath -PathType Leaf)
+        {
+            return $candidatePath
+        }
+    }
+
+    $candidate = Get-ChildItem -LiteralPath $DirectoryPath -Filter "*.dll" -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $knownNames -contains $_.Name } |
+        Select-Object -First 1
+
+    if ($candidate)
+    {
+        return $candidate.FullName
+    }
+
+    return $null
+}
+
+function Find-LocalDevelopmentZipCodeDll
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [string] $RepositoryRootPath,
+
+        [Parameter(Mandatory = $true)]
+        [string] $ScriptDirectoryPath
+    )
+
+    $candidateRoots = @(
+        $RepositoryRootPath,
+        $ScriptDirectoryPath,
+        (Split-Path -Path $ScriptDirectoryPath -Parent)
+    ) | Where-Object { $_ } | Select-Object -Unique
+
+    foreach ($candidateRoot in $candidateRoots)
+    {
+        $projectPath = Join-Path -Path $candidateRoot -ChildPath "ZipCode.Cli.csproj"
+
+        if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf))
+        {
+            continue
+        }
+
+        $binPath = Join-Path -Path $candidateRoot -ChildPath "bin"
+
+        if (-not (Test-Path -LiteralPath $binPath -PathType Container))
+        {
+            continue
+        }
+
+        $candidateDll = Get-ChildItem -LiteralPath $binPath -Filter "ZipCode.Cli.dll" -Recurse -File -ErrorAction SilentlyContinue |
+            Sort-Object -Property LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+
+        if ($candidateDll)
+        {
+            return $candidateDll.FullName
+        }
+    }
+
+    return $null
+}
+
+function Install-ZipCodeCli
+{
+    param
+    (
+        [Parameter(Mandatory = $true)]
+        [string] $InstallDirectoryPath,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Version
+    )
+
+    if ($NoDownload)
+    {
+        throw "ZipCode CLI was not found in cache and -NoDownload was specified."
+    }
+
+    $downloadUrl = Get-ZipCodeDownloadUrl -Version $Version
+    $cacheRootPath = Split-Path -Path $InstallDirectoryPath -Parent
+    $archivePath = Join-Path -Path $cacheRootPath -ChildPath "zip-code-$Version.zip"
+
+    New-Item -ItemType Directory -Force -Path $cacheRootPath | Out-Null
+
+    if (Test-Path -LiteralPath $InstallDirectoryPath)
+    {
+        Remove-Item -LiteralPath $InstallDirectoryPath -Recurse -Force
+    }
+
+    New-Item -ItemType Directory -Force -Path $InstallDirectoryPath | Out-Null
+
+    Write-Host "Downloading ZipCode CLI $Version..."
+    Write-Host $downloadUrl
+
+    # Windows PowerShell 5.1 may otherwise use older TLS defaults.
+    if ($PSVersionTable.PSEdition -eq "Desktop")
+    {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    }
+
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
+
+    Write-Host "Extracting ZipCode CLI..."
+    Expand-Archive -Path $archivePath -DestinationPath $InstallDirectoryPath -Force
+
+    Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+
+    $cliDllPath = Find-ZipCodeDll -DirectoryPath $InstallDirectoryPath
+
+    if (-not $cliDllPath)
+    {
+        throw "Downloaded archive does not contain ZipCode.Cli.dll or zip-code.dll."
+    }
+
+    return $cliDllPath
+}
+
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue))
+{
+    throw "The 'dotnet' command was not found. Install the required .NET runtime before running ZipCode."
+}
+
+$scriptDirectoryPath = $PSScriptRoot
+
+if (-not $RepositoryRootPath)
+{
+    $RepositoryRootPath = (Get-Location).ProviderPath
+}
+else
+{
+    $RepositoryRootPath = Resolve-FullPath -Path $RepositoryRootPath
+}
+
+if (-not (Test-Path -LiteralPath $RepositoryRootPath -PathType Container))
+{
+    throw "Repository root directory was not found: $RepositoryRootPath"
+}
+
+if (-not $ConfigurationPath)
+{
+    $ConfigurationPath = Join-Path -Path $scriptDirectoryPath -ChildPath "zip-code.config.json"
+}
+else
+{
+    $ConfigurationPath = Resolve-FullPath -Path $ConfigurationPath
+}
+
+if (-not (Test-Path -LiteralPath $ConfigurationPath -PathType Leaf))
+{
+    throw "ZipCode configuration file was not found: $ConfigurationPath"
+}
+
+$effectiveVersion = if ($Latest) { "latest" } else { $ZipCodeVersion }
+$cacheDirectoryPath = Join-Path -Path $scriptDirectoryPath -ChildPath ".zip-code"
+$scopeNames = Convert-ScopeArguments -Values $Scope
+$scopeResolution = New-CompositeScopeConfiguration `
+    -ConfigurationPath $ConfigurationPath `
+    -ScopeNames $scopeNames `
+    -CacheDirectoryPath $cacheDirectoryPath
+
+$effectiveConfigurationPath = $scopeResolution.ConfigurationPath
+$effectiveScopeName = $scopeResolution.ScopeName
+
+$localDevelopmentDllPath = Find-LocalDevelopmentZipCodeDll `
+    -RepositoryRootPath $RepositoryRootPath `
+    -ScriptDirectoryPath $scriptDirectoryPath
+
+if ($localDevelopmentDllPath)
+{
+    $cliDllPath = $localDevelopmentDllPath
+    Write-Host "Using local development ZipCode CLI: $cliDllPath"
+}
+else
+{
+    $installDirectoryPath = Join-Path -Path $cacheDirectoryPath -ChildPath $effectiveVersion
+
+    $cliDllPath = Find-ZipCodeDll -DirectoryPath $installDirectoryPath
+
+    if ($ForceDownload -or -not $cliDllPath)
+    {
+        $cliDllPath = Install-ZipCodeCli `
+            -InstallDirectoryPath $installDirectoryPath `
+            -Version $effectiveVersion
+    }
+}
+
+$arguments = @(
+    $cliDllPath,
+    "pack",
+    "--config",
+    $effectiveConfigurationPath,
+    "--scope",
+    $effectiveScopeName
+)
+
+if ($DryRun)
+{
+    $arguments += "--dry-run"
+}
+
+if ($Print)
+{
+    $arguments += "--print-files"
+}
+
+if ($CliArguments)
+{
+    $arguments += $CliArguments
+}
+
+Write-Host "Running ZipCode from repository root: $RepositoryRootPath"
+Write-Host "Scope: $($scopeNames -join ', ')"
+
+$exitCode = 0
+Push-Location -LiteralPath $RepositoryRootPath
 try
 {
-    & $ZipCodeExecutablePath pack --config $ConfigurationPath --scope All
+    & dotnet @arguments
+    $exitCode = $LASTEXITCODE
 }
 finally
 {
     Pop-Location
 }
+
+exit $exitCode
