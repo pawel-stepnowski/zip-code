@@ -103,7 +103,7 @@ class ZipPackageWriter
                     WriteItem(archive, item, compressionLevel);
                 }
 
-                WriteManifest(archive, manifestEntryName, manifestJson);
+                WriteManifest(archive, manifestEntryName, manifestJson, compressionLevel);
             }
 
             MoveStagingToOutput(stagingPath, outputPath, loadedConfiguration.Configuration.Output.Overwrite);
@@ -227,7 +227,7 @@ class ZipPackageWriter
             WriteItem(archive, item, compressionLevel);
         }
 
-        WriteManifest(archive, manifestEntryName, manifestJson);
+        WriteManifest(archive, manifestEntryName, manifestJson, compressionLevel);
     }
 
     private static void WriteItem(ZipArchive archive, PackagePlanItem item, CompressionLevel compressionLevel)
@@ -249,9 +249,9 @@ class ZipPackageWriter
         input.CopyTo(output);
     }
 
-    private static void WriteManifest(ZipArchive archive, string manifestEntryName, string manifestJson)
+    private static void WriteManifest(ZipArchive archive, string manifestEntryName, string manifestJson, CompressionLevel compressionLevel)
     {
-        var manifestEntry = archive.CreateEntry(manifestEntryName, CompressionLevel.NoCompression);
+        var manifestEntry = archive.CreateEntry(manifestEntryName, compressionLevel);
         manifestEntry.LastWriteTime = DateTimeOffset.UtcNow;
 
         using var writer = new StreamWriter(manifestEntry.Open());
