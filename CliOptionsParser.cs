@@ -6,7 +6,7 @@ class CliOptionsParser
     {
         var command = "pack";
         string? configPath = null;
-        string? scope = null;
+        var scopes = new List<string>();
         string? outputPath = null;
         var printFiles = false;
         var dryRun = false;
@@ -30,7 +30,7 @@ class CliOptionsParser
                     break;
                 case "-s":
                 case "--scope":
-                    scope = ReadValue(args, ref index, arg);
+                    AddScopeValues(scopes, ReadValue(args, ref index, arg));
                     break;
                 case "-o":
                 case "--output":
@@ -54,7 +54,18 @@ class CliOptionsParser
             }
         }
 
-        return new CliOptions(command, configPath, scope, outputPath, printFiles, dryRun, showHelp);
+        return new CliOptions(command, configPath, scopes, outputPath, printFiles, dryRun, showHelp);
+    }
+
+    private static void AddScopeValues(List<string> scopes, string value)
+    {
+        foreach (var part in value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!scopes.Contains(part, StringComparer.OrdinalIgnoreCase))
+            {
+                scopes.Add(part);
+            }
+        }
     }
 
     private static string ReadValue(string[] args, ref int index, string optionName)

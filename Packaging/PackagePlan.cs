@@ -6,7 +6,12 @@ internal sealed record PackagePlan
     IReadOnlyList<PackagePlanItem> Items
 )
 {
-    public string ScopeLabel => Scopes.Count == 1
-        ? Scopes[0]
-        : string.Join("+", Scopes);
+    public string ScopeLabel => GetScopeLabel(Scopes);
+
+    public static string GetScopeLabel(IReadOnlyList<string> scopes)
+    {
+        return scopes.Count == 1
+            ? scopes[0]
+            : string.Join("+", scopes);
+    }
 }

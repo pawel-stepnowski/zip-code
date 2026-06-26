@@ -23,12 +23,13 @@ static class Program
             }
 
             var loadedConfiguration = RuntimeConfigurationLoader.Load(options.ConfigurationFilePath);
-            var scopeName = options.Scope
-                ?? loadedConfiguration.Configuration.DefaultScope
-                ?? "All";
+            var scopeNames = options.Scopes.Count > 0
+                ? options.Scopes
+                : [loadedConfiguration.Configuration.DefaultScope ?? "All"];
 
-            var outputPath = ZipPackageWriter.GetOutputPath(loadedConfiguration, scopeName, options.OutputPath);
-            var planBuilder = new PackagePlanBuilder(loadedConfiguration, scopeName, outputPath);
+            var scopeLabel = PackagePlan.GetScopeLabel(scopeNames);
+            var outputPath = ZipPackageWriter.GetOutputPath(loadedConfiguration, scopeLabel, options.OutputPath);
+            var planBuilder = new PackagePlanBuilder(loadedConfiguration, scopeNames, outputPath);
             var plan = planBuilder.Build();
 
             if (options.PrintFiles)
@@ -85,7 +86,7 @@ static class Program
 
         Options:
           -c, --config <path>   Configuration file. Default: search zip-code.config.json from current directory upward
-          -s, --scope <name>    Scope name from configuration. Default: config defaultScope or All
+          -s, --scope <name>    Scope name from configuration. Can be repeated or comma-separated. Default: config defaultScope or All
           -o, --output <path>   Output ZIP path override
               --print-files     Print included relative paths
               --dry-run         Build the file list without creating ZIP

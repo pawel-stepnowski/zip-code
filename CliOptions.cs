@@ -4,7 +4,7 @@ record CliOptions
 (
     string Command,
     string? ConfigurationFilePath,
-    string? Scope,
+    IReadOnlyList<string> Scopes,
     string? OutputPath,
     bool PrintFiles,
     bool DryRun,

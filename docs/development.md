@@ -18,6 +18,8 @@ The default repository config packages this project and writes ZIP files to `.zi
 ```powershell
 dotnet ZipCode.Cli.dll pack --config .\zip-code.config.json --scope All
 dotnet ZipCode.Cli.dll pack --scope Backend --dry-run --print-files
+dotnet ZipCode.Cli.dll pack --scope Frontend --scope Backend --dry-run
+dotnet ZipCode.Cli.dll pack --scope Frontend,Backend --dry-run
 dotnet ZipCode.Cli.dll pack --scope All --output .zipcode\manual.zip
 ```
 
@@ -64,7 +66,7 @@ If writing fails, the incomplete staging ZIP is left in place and named clearly.
 `zip-code.ps1` is intended to be copied into repositories that need packaging. It:
 
 - runs from `RepositoryRootPath`;
-- creates generated composite-scope configs under `.zip-code/configs`;
+- passes one or more scopes directly to the CLI;
 - uses a local development DLL when available;
 - otherwise uses a cached/downloaded release asset;
 - forwards `-DryRun`, `-Print`, and extra CLI arguments.

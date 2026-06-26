@@ -155,7 +155,7 @@ Supported glob behavior:
 # Package one scope.
 .\zip-code.ps1 -Scope Backend
 
-# Package several scopes as one generated composite scope.
+# Package several scopes together.
 .\zip-code.ps1 -Scope Frontend,Backend
 
 # Use a config from another location.
@@ -164,7 +164,7 @@ Supported glob behavior:
 
 Useful parameters:
 
-- `-Scope`: one or more scope names. Comma-separated values are accepted.
+- `-Scope`: one or more scope names. Comma-separated values are accepted and passed directly to the CLI.
 - `-ConfigurationPath`: path to the config file.
 - `-RepositoryRootPath`: root used as the process working directory. Defaults to the current directory.
 - `-DryRun`: build the file list without creating a ZIP.
