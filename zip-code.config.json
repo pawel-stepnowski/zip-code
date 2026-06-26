@@ -31,7 +31,7 @@
       "action": "include",
       "target": "any",
       "patterns": [
-        "backend/Connectico.Integrations.Amazon/Generated/**"
+        "backend/My.Project/Generated/**"
       ]
     },
     {
